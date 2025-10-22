@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Προσομοίωση Μπριτζ</title>
+    <style>
+        /* --- ΒΑΣΙΚΗ ΔΙΑΜΟΡΦΩΣΗ --- */
+        body {
+            background-color: #000000; /* Μαύρο φόντο (arcade) */
+            color: #FFFFFF;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #game-container {
+            position: relative;
+            width: 1200px;
+            height: 900px;
+            user-select: none;
+        }
+
+        /* --- ΤΡΑΠΕΖΙ --- */
+        #outer-table {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 700px; /* Μεγαλύτερο τετράγωνο 2 */
+            height: 550px;
+            background-color: #003300; /* Πολύ σκούρο πράσινο */
+            border: 2px solid #F5F5DC; /* Ανοιχτό μπεζ περίγραμμα */
+            box-shadow: 0 0 20px rgba(245, 245, 220, 0.3);
+            border-radius: 10px;
+        }
+
+        #inner-table {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 450px;
+            height: 350px;
+            background-color: #006400; /* Πράσινο */
+            border-radius: 5px;
+        }
+        
+        /* --- ΠΕΡΙΟΧΗ ΠΑΙΓΜΕΝΩΝ ΦΥΛΛΩΝ (ΛΕΒΕ) --- */
+        #trick-area {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 220px; /* 2 * card-width + gaps */
+            height: 280px; /* 2 * card-height + gaps */
+        }
+
+        .played-card-slot {
+            position: absolute;
+            width: 80px;
+            height: 120px;
+        }
+
+        /* Θέσεις που ταιριάζουν με την περιγραφή "κινείται προς..." */
+        #played-north { /* Κινείται προς τα κάτω και κέντρο */
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        #played-south { /* Κινείται προς τα πάνω και κέντρο */
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        #played-west { /* Κινείται προς τα δεξιά και κέντρο */
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        #played-east { /* Κινείται προς τα αριστερά και κέντρο */
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        /* --- UI Elements --- */
+        #message-box {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background-color: transparent;
+            color: #FFFF99; /* Ανοιχτό κίτρινο */
+            border: none; /* Χωρίς περίγραμμα */
+            padding: 15px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 5px;
+            z-index: 100;
+            max-width: 200px; /* Για να μην καλύπτει φύλλα */
+        }
+
+        #new-game-button {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 12px 18px;
+            font-size: 16px;
+            font-weight: bold;
+            background-color: #FFD700; /* Κίτρινο */
+            color: #000000; /* Μαύρα γράμματα */
+            border: 3px solid #DAA520; /* Πιο σκούρο κίτρινο */
+            border-radius: 5px;
+            cursor: pointer;
+            z-index: 100;
+        }
+        #new-game-button:hover {
+            background-color: #FFFF00;
+        }
+        
+        #score-box {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background-color: #000;
+            color: #FFFF99; /* Ανοιχτό κίτρινο */
+            border: 2px solid #FFFF00; /* Κίτρινο περίγραμμα */
+            padding: 10px;
+            font-size: 14px;
+            font-weight: bold;
+            z-index: 100;
+            line-height: 1.5;
+            min-width: 100px;
+            max-width: 250px; /* Για να μην καλύπτει φύλλα */
+        }
+
+        /* --- ΕΤΙΚΕΤΕΣ ΠΑΙΚΤΩΝ --- */
+        .player-label {
+            position: absolute;
+            color: #FFFFCC; /* Ανοιχτό υποκίτρινο */
+            font-size: 18px;
+            font-weight: bold;
+            z-index: 50;
+        }
+        .player-label.active {
+            color: #FFFF00; /* Έντονο κίτρινο */
+            text-shadow: 0 0 5px #FFFF00;
+        }
+
+        #label-north {
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        #label-south {
+            bottom: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        #label-west {
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%) rotate(-90deg);
+            transform-origin: left center;
+        }
+        #label-east {
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%) rotate(90deg);
+            transform-origin: right center;
+        }
+
+
+        /* --- ΦΥΛΛΑ --- */
+        .card {
+            width: 80px;
+            height: 120px;
+            background-color: #FAFAFA; /* Υπόλευκο */
+            border: 1px solid #333;
+            border-radius: 6px;
+            position: relative;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
+            font-weight: bold;
+            overflow: hidden; /* Για να μην προεξέχει το border */
+        }
+
+        .card.back {
+            background-color: #DAA520; /* Μουσταρδί */
+            border: 4px solid #FFFFFF; /* Παχύ λευκό περίγραμμα */
+            box-sizing: border-box; /* Το border μετράει στο μέγεθος */
+        }
+        
+        .card.back .card-value-small,
+        .card.back .card-value-large {
+            display: none;
+        }
+
+        .card-value-small {
+            position: absolute;
+            top: 5px;
+            left: 7px; /* Πάνω αριστερή γωνία */
+            font-size: 16px;
+            line-height: 1;
+        }
+
+        .card-value-large {
+            font-size: 40px;
+            text-align: center;
+            line-height: 120px; /* Κεντράρισμα */
+        }
+
+        /* Χρώματα φύλλων */
+        .suit-♠, .suit-♣ { color: #000000; }
+        .suit-♥, .suit-♦ { color: #FF0000; }
+        
+        /* Κλάσεις για φύλλα που παίζονται */
+        .playable {
+            cursor: pointer;
+            border: 2px solid #FFFF00; /* Κίτρινη επισήμανση */
+        }
+        .playable:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(255, 255, 0, 0.4);
+        }
+
+        /* --- ΧΕΡΙΑ ΠΑΙΚΤΩΝ (AREAS) --- */
+        .hand-area {
+            position: absolute;
+            display: flex;
+            z-index: 60;
+        }
+
+        /* ΝΟΤΟΣ (Κάτω) */
+        #hand-south {
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        #hand-south .card {
+            margin-left: -50px; /* Επικάλυψη */
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        #hand-south .card:first-child {
+            margin-left: 0;
+        }
+
+        /* ΒΟΡΡΑΣ (Πάνω) */
+        #hand-north {
+            top: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            gap: 10px; /* Κενό μεταξύ στηλών-χρωμάτων */
+        }
+        .suit-column {
+            position: relative;
+            width: 80px; /* Πλάτος φύλλου */
+        }
+        .suit-column .card {
+            position: absolute;
+            left: 0;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        /* ΔΥΣΗ (Αριστερά) */
+        #hand-west {
+            left: 60px; /* Πιο έξω από το label */
+            top: 50%;
+            transform: translateY(-50%);
+            flex-direction: column; /* Στοίβα */
+        }
+        #hand-west .card {
+            margin-top: -105px; /* Επικάλυψη στοίβας (με το border) */
+        }
+        #hand-west .card:first-child {
+            margin-top: 0;
+        }
+
+
+        /* ΑΝΑΤΟΛΗ (Δεξιά) */
+        #hand-east {
+            right: 60px; /* Πιο έξω από το label */
+            top: 50%;
+            transform: translateY(-50%);
+            flex-direction: column; /* Στοίβα */
+        }
+        #hand-east .card {
+            margin-top: -105px; /* Επικάλυψη στοίβας (με το border) */
+        }
+        #hand-east .card:first-child {
+            margin-top: 0;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="message-box">Εκτελείτε με τα φύλλα του Νότου. Μπορείτε να κερδίσετε 9 λεβέ;</div>
+        <button id="new-game-button">Νέο Παιχνίδι</button>
+        <div id="score-box">
+            ΒΝ 0 λεβέ<br>
+            ΑΔ 0 λεβέ
+        </div>
+
+        <div id="label-north" class="player-label">Βορράς (Μορ)</div>
+        <div id="label-east" class="player-label">Ανατολή</div>
+        <div id="label-south" class="player-label">Νότος (Εκτελεστής)</div>
+        <div id="label-west" class="player-label">Δύση</div>
+
+        <div id="outer-table">
+            <div id="inner-table">
+                <div id="trick-area">
+                    <div id="played-north" class="played-card-slot"></div>
+                    <div id="played-east" class="played-card-slot"></div>
+                    <div id="played-south" class="played-card-slot"></div>
+                    <div id="played-west" class="played-card-slot"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="hand-north" class="hand-area" data-player="NORTH"></div>
+        <div id="hand-east" class="hand-area" data-player="EAST"></div>
+        <div id="hand-south" class="hand-area" data-player="SOUTH"></div>
+        <div id="hand-west" class="hand-area" data-player="WEST"></div>
+    </div>
+
+    <script>
+        // --- DOM Elements ---
+        const gameContainer = document.getElementById('game-container');
+        const messageBox = document.getElementById('message-box');
+        const newGameButton = document.getElementById('new-game-button');
+        const scoreBox = document.getElementById('score-box');
+        
+        const handContainers = {
+            NORTH: document.getElementById('hand-north'),
+            SOUTH: document.getElementById('hand-south'),
+            EAST: document.getElementById('hand-east'),
+            WEST: document.getElementById('hand-west')
+        };
+        const playedCardSlots = {
+            NORTH: document.getElementById('played-north'),
+            SOUTH: document.getElementById('played-south'),
+            EAST: document.getElementById('played-east'),
+            WEST: document.getElementById('played-west')
+        };
+        const playerLabels = {
+            NORTH: document.getElementById('label-north'),
+            SOUTH: document.getElementById('label-south'),
+            EAST: document.getElementById('label-east'),
+            WEST: document.getElementById('label-west')
+        };
+
+        // --- Game Constants ---
+        const PLAYERS = ['WEST', 'NORTH', 'EAST', 'SOUTH'];
+        const SUITS = { 's': '♠', 'h': '♥', 'd': '♦', 'c': '♣' };
+        const SUIT_KEYS = { '♠': 'spades', '♥': 'hearts', '♦': 'diamonds', '♣': 'clubs' };
+        const VALUES = {
+            '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, 
+            '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14
+        };
+
+        // --- Game State ---
+        let gameState = {};
+
+        function getInitialGameState() {
+            // Χέρια όπως δόθηκαν
+            const initialHands = {
+                SOUTH: "A 3 2 spade, K 3 2 heart, A 3 2 club, K Q J 10 diamond",
+                WEST: "Q J 10 9 8 spade, 8 7 6 heart, 8 7 6 club, A 2 diamond",
+                NORTH: "K 5 4 spade, A 5 4 heart, K 5 4 club, 9 8 7 6 diamond"
+            };
+            
+            // Υπολογισμός χεριού Ανατολής
+            const allCards = new Set();
+            ['s', 'h', 'd', 'c'].forEach(s => {
+                ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'].forEach(v => {
+                    allCards.add(s + v);
+                });
+            });
+
+            // Χρησιμοποιούμε τη parseHandString για να πάρουμε τα IDs των φύλλων
+            const southCards = parseHandString(initialHands.SOUTH).map(c => c.id);
+            const westCards = parseHandString(initialHands.WEST).map(c => c.id);
+            const northCards = parseHandString(initialHands.NORTH).map(c => c.id);
+            
+            // Αφαιρούμε τα φύλλα από το allCards
+            [...southCards, ...westCards, ...northCards].forEach(id => allCards.delete(id));
+            
+            // Τα υπόλοιπα είναι της Ανατολής
+            const eastCards = Array.from(allCards).map(cardFactory);
+
+            return {
+                hands: {
+                    SOUTH: parseHandString(initialHands.SOUTH),
+                    WEST: parseHandString(initialHands.WEST),
+                    NORTH: parseHandString(initialHands.NORTH),
+                    EAST: eastCards
+                },
+                currentTrick: [], // { player, card }
+                leadSuit: null,
+                leadPlayer: 'WEST',
+                currentPlayer: 'WEST',
+                tricksWon: { 'NS': 0, 'EW': 0 },
+                totalTricks: 0,
+                gameLock: false, // Κλείδωμα για αποφυγή διπλών κλικ
+                history: {
+                    played_hA: false,
+                    played_hK: false,
+                    played_cA: false,
+                    played_cK: false
+                },
+                lastWinningSuit: null
+            };
+        }
+
+        // --- Card Utility Functions ---
+
+        function cardFactory(id) {
+            const suitChar = id.slice(0, 1);
+            const valueStr = id.slice(1);
+            // Έλεγχος για έγκυρα δεδομένα, ειδικά για την Ανατολή
+            if (!SUITS[suitChar] || !VALUES[valueStr]) {
+                console.warn("Invalid card ID created:", id);
+                return null;
+            }
+            return {
+                id: id,
+                suit: SUITS[suitChar],
+                suitKey: SUIT_KEYS[SUITS[suitChar]],
+                value: valueStr,
+                rank: VALUES[valueStr]
+            };
+        }
+
+        function parseHandString(handStr) {
+            const suitMap = { 'spade': 's', 'heart': 'h', 'club': 'c', 'diamond': 'd' };
+            let cardIds = [];
+            
+            handStr.split(',').forEach(part => {
+                const trimmedPart = part.trim();
+                const parts = trimmedPart.split(' ');
+                const suit = suitMap[parts[parts.length - 1]];
+                const values = parts.slice(0, -1);
+                values.forEach(val => cardIds.push(suit + val));
+            });
+
+            // Φιλτράρισμα τυχόν null από το cardFactory
+            return cardIds.map(cardFactory).filter(card => card !== null).sort((a, b) => {
+                const suitOrder = ['♠', '♥', '♣', '♦'];
+                if (a.suit !== b.suit) {
+                    return suitOrder.indexOf(a.suit) - suitOrder.indexOf(b.suit);
+                }
+                return b.rank - a.rank;
+            });
+        }
+        
+        function createCardElement(card, isBack = false) {
+            const cardEl = document.createElement('div');
+            cardEl.className = `card suit-${card.suit}`;
+            cardEl.dataset.id = card.id;
+
+            if (isBack) {
+                cardEl.classList.add('back');
+            }
+
+            const valueSmall = document.createElement('div');
+            valueSmall.className = 'card-value-small';
+            valueSmall.innerHTML = `${card.value}<br>${card.suit}`; // Χρήση innerHTML για <br>
+            
+            const valueLarge = document.createElement('div');
+            valueLarge.className = 'card-value-large';
+            valueLarge.textContent = `${card.value}${card.suit}`;
+            
+            cardEl.appendChild(valueSmall);
+            cardEl.appendChild(valueLarge);
+
+            return cardEl;
+        }
+
+        // --- Render Functions ---
+
+        function renderHands() {
+            Object.values(handContainers).forEach(cont => cont.innerHTML = '');
+            Object.values(playedCardSlots).forEach(slot => slot.innerHTML = '');
+
+            // Νότος
+            const southHand = gameState.hands.SOUTH;
+            const southOrder = ['♠', '♥', '♣', '♦'];
+            southHand.sort((a, b) => { // Ταξινόμηση βάσει της σειράς στο prompt
+                 if (a.suit !== b.suit) {
+                    return southOrder.indexOf(a.suit) - southOrder.indexOf(b.suit);
+                }
+                return b.rank - a.rank;
+            });
+            southHand.forEach(card => {
+                const cardEl = createCardElement(card);
+                handContainers.SOUTH.appendChild(cardEl);
+            });
+
+            // Βορράς
+            const northHand = gameState.hands.NORTH;
+            const northSuits = { '♠': [], '♥': [], '♣': [], '♦': [] };
+            northHand.forEach(card => northSuits[card.suit].push(card));
+            
+            ['♠', '♥', '♣', '♦'].forEach(suit => {
+                const column = document.createElement('div');
+                column.className = 'suit-column';
+                // Ταξινόμηση: K, 5, 4 (υψηλότερο προς χαμηλότερο rank)
+                northSuits[suit].sort((a, b) => a.rank - b.rank); 
+                // Αντιστροφή για να μπει το χαμηλότερο τελευταίο (και άρα πιο κάτω/μπροστά)
+                northSuits[suit].reverse().forEach((card, index) => {
+                    const cardEl = createCardElement(card);
+                    // Το χαμηλότερο φύλλο (π.χ. 4) έχει μεγαλύτερο index
+                    cardEl.style.top = `${index * 25}px`; 
+                    cardEl.style.zIndex = index; // Το χαμηλότερο μπροστά
+                    column.appendChild(cardEl);
+                });
+                handContainers.NORTH.appendChild(column);
+            });
+
+            // Δύση & Ανατολή (Φύλλα με την πλάτη)
+            for (let i = 0; i < gameState.hands.WEST.length; i++) {
+                const backCard = createCardElement({ id: `w_back_${i}`, suit: '♠', value: '' }, true);
+                handContainers.WEST.appendChild(backCard);
+            }
+             for (let i = 0; i < gameState.hands.EAST.length; i++) {
+                const backCard = createCardElement({ id: `e_back_${i}`, suit: '♠', value: '' }, true);
+                handContainers.EAST.appendChild(backCard);
+            }
+        }
+        
+        function removeBackCard(player) {
+            const container = handContainers[player];
+            if (container.lastChild) {
+                container.removeChild(container.lastChild);
+            }
+        }
+
+        function updateScoreboard() {
+            scoreBox.innerHTML = `ΒΝ ${gameState.tricksWon.NS} λεβέ<br>ΑΔ ${gameState.tricksWon.EW} λεβέ`;
+        }
+
+        function updateActivePlayerLabel() {
+            Object.values(playerLabels).forEach(label => label.classList.remove('active'));
+            if (gameState.currentPlayer) {
+                playerLabels[gameState.currentPlayer].classList.add('active');
+            }
+        }
+        
+        function updatePlayableCards() {
+            document.querySelectorAll('.card.playable').forEach(c => c.classList.remove('playable'));
+
+            const player = gameState.currentPlayer;
+            if (player !== 'SOUTH' && player !== 'NORTH') return;
+
+            const playableCards = getPlayableCards(player);
+            const handContainer = handContainers[player];
+            
+            playableCards.forEach(card => {
+                const cardEl = handContainer.querySelector(`[data-id="${card.id}"]`);
+                if (cardEl) {
+                    cardEl.classList.add('playable');
+                }
+            });
+        }
+
+        // --- Game Logic Functions ---
+
+        function initGame() {
+            gameState = getInitialGameState();
+            
+            messageBox.textContent = "Εκτελείτε με τα φύλλα του Νότου. Μπορείτε να κερδίσετε 9 λεβέ;";
+            
+            renderHands();
+            updateScoreboard();
+            updateActivePlayerLabel();
+            
+            // Το παιχνίδι ξεκινά *αμέσως* με τη Δύση να παίζει Q spade
+            setTimeout(playFirstCard, 500);
+        }
+
+        function playFirstCard() {
+            const player = 'WEST';
+            const cardToPlay = gameState.hands[player].find(c => c.id === 'sQ');
+            
+            if (cardToPlay) {
+                playCard(player, cardToPlay);
+            } else {
+                console.error("Δεν βρέθηκε η Q spade της Δύσης!");
+                // Fallback αν κάτι πάει στραβά
+                playCard(player, gameState.hands[player][0]);
+            }
+        }
+        
+        function handleCardClick(event) {
+            if (gameState.gameLock) return;
+
+            const cardEl = event.target.closest('.card.playable');
+            if (!cardEl) return; 
+
+            const playerTurn = gameState.currentPlayer;
+            const cardOwner = cardEl.closest('.hand-area').dataset.player;
+            
+            if (playerTurn !== cardOwner) {
+                return; 
+            }
+
+            const cardId = cardEl.dataset.id;
+            const card = gameState.hands[playerTurn].find(c => c.id === cardId);
+
+            playCard(playerTurn, card);
+        }
+        
+        function playCard(player, card) {
+            if (gameState.gameLock) return;
+            gameState.gameLock = true;
+            
+            // 1. Αφαίρεση φύλλου από το χέρι (state)
+            const hand = gameState.hands[player];
+            const cardIndex = hand.findIndex(c => c.id === card.id);
+            if (cardIndex > -1) {
+                hand.splice(cardIndex, 1);
+            } else {
+                console.error(`Δεν βρέθηκε το φύλλο ${card.id} στο χέρι του ${player}`);
+                gameState.gameLock = false;
+                return;
+            }
+            
+            // 2. Ενημέρωση ιστορικού (για AI)
+            if (card.id === 'hA') gameState.history.played_hA = true;
+            if (card.id === 'hK') gameState.history.played_hK = true;
+            if (card.id === 'cA') gameState.history.played_cA = true;
+            if (card.id === 'cK') gameState.history.played_cK = true;
+
+            // 3. Προσθήκη φύλλου στη λεβέ (state)
+            gameState.currentTrick.push({ player, card });
+            if (gameState.currentTrick.length === 1) {
+                gameState.leadSuit = card.suitKey;
+                gameState.leadPlayer = player;
+            }
+
+            // 4. Εμφάνιση φύλλου στο τραπέζι (UI)
+            const cardEl = createCardElement(card);
+            playedCardSlots[player].innerHTML = ''; // Καθαρισμός προηγούμενου
+            playedCardSlots[player].appendChild(cardEl);
+
+            // 5. Αφαίρεση φύλλου από το χέρι (UI)
+            if (player === 'NORTH' || player === 'SOUTH') {
+                const cardElInHand = handContainers[player].querySelector(`[data-id="${card.id}"]`);
+                if (cardElInHand) cardElInHand.remove();
+            } else {
+                removeBackCard(player);
+            }
+            
+            // 6. Επόμενος παίκτης
+            const nextPlayerIndex = (PLAYERS.indexOf(player) + 1) % 4;
+            gameState.currentPlayer = PLAYERS[nextPlayerIndex];
+            updateActivePlayerLabel();
+            
+            // 7. Έλεγχος τέλους λεβέ
+            if (gameState.currentTrick.length === 4) {
+                setTimeout(endTrick, 1000); 
+            } else {
+                gameState.gameLock = false;
+                triggerNextPlay();
+            }
+        }
+        
+        function endTrick() {
+            const winner = determineTrickWinner();
+            
+            if (winner === 'NORTH' || winner === 'SOUTH') {
+                gameState.tricksWon.NS++;
+            } else {
+                gameState.tricksWon.EW++;
+            }
+            gameState.totalTricks++;
+            gameState.lastWinningSuit = gameState.leadSuit;
+            
+            console.log(`Λεβέ ${gameState.totalTricks}. Νικητής: ${winner}. Σκορ: NS ${gameState.tricksWon.NS} - EW ${gameState.tricksWon.EW}`);
+            updateScoreboard();
+            
+            setTimeout(() => {
+                Object.values(playedCardSlots).forEach(slot => slot.innerHTML = '');
+                
+                gameState.currentTrick = [];
+                gameState.leadSuit = null;
+                gameState.leadPlayer = winner;
+                gameState.currentPlayer = winner;
+                
+                if (gameState.totalTricks === 13) {
+                    endGame();
+                } else {
+                    gameState.gameLock = false;
+                    updateActivePlayerLabel();
+                    triggerNextPlay();
+                }
+            }, 1500);
+        }
+        
+        function determineTrickWinner() {
+            let winningCard = gameState.currentTrick[0].card;
+            let winner = gameState.currentTrick[0].player;
+            
+            for (let i = 1; i < gameState.currentTrick.length; i++) {
+                const entry = gameState.currentTrick[i];
+                if (entry.card.suitKey === gameState.leadSuit && entry.card.rank > winningCard.rank) {
+                    winningCard = entry.card;
+                    winner = entry.player;
+                }
+            }
+            return winner;
+        }
+
+        function endGame() {
+            gameState.gameLock = true;
+            gameState.currentPlayer = null;
+            updateActivePlayerLabel(); // Καθαρίζει τον active παίκτη
+            
+            if (gameState.tricksWon.NS >= 9) {
+                messageBox.textContent = "Μπράβο, κερδίσατε!";
+            } else {
+                messageBox.textContent = "Δοκιμάστε ξανά…";
+            }
+        }
+        
+        function triggerNextPlay() {
+            updatePlayableCards(); 
+            
+            const player = gameState.currentPlayer;
+            if (player === 'WEST' || player === 'EAST') {
+                if (gameState.gameLock) return;
+                
+                setTimeout(() => {
+                    const cardToPlay = getAIPlay(player);
+                    if (cardToPlay) {
+                        playCard(player, cardToPlay);
+                    } else {
+                        console.error("AI Error: Δεν βρέθηκε φύλλο για να παίξει η", player);
+                        // Fallback σε περίπτωση σφάλματος λογικής
+                        playCard(player, gameState.hands[player][0]);
+                    }
+                }, 1000);
+            }
+        }
+        
+        function getPlayableCards(player) {
+            const hand = gameState.hands[player];
+            if (!gameState.leadSuit) {
+                return hand;
+            }
+
+            const cardsInSuit = hand.filter(c => c.suitKey === gameState.leadSuit);
+            if (cardsInSuit.length > 0) {
+                return cardsInSuit;
+            } else {
+                return hand;
+            }
+        }
+        
+        // --- AI Logic ---
+        
+        function getAIPlay(player) {
+            const playableCards = getPlayableCards(player);
+            
+            // 1. Αν δεν ανοίγει (lead), απλή λογική
+            if (gameState.leadSuit) {
+                // Αν ακολουθεί (πρέπει να παίξει το leadSuit)
+                if (playableCards[0].suitKey === gameState.leadSuit) {
+                    // Παίζει το χαμηλότερο φύλλο
+                    return playableCards.sort((a, b) => a.rank - b.rank)[0];
+                } 
+                // Αν πετάει (discard)
+                else {
+                    return getAIDiscard(player, playableCards);
+                }
+            }
+            
+            // 2. Αν ανοίγει (lead)
+            const hand = gameState.hands[player];
+            if (player === 'WEST') {
+                return getWestLead(hand);
+            } else { // player === 'EAST'
+                return getEastLead(hand);
+            }
+        }
+        
+        function getAIDiscard(player, playableCards) {
+            // Ταξινόμηση από χαμηλότερο σε υψηλότερο
+            const sortedCards = [...playableCards].sort((a,b) => a.rank - b.rank);
+
+            if (player === 'WEST') {
+                // 1. Προσπάθεια να πετάξει το 'd2'
+                const d2 = sortedCards.find(c => c.id === 'd2');
+                if (d2) return d2;
+
+                // 2. Αν δεν έχει το 2d, πετάει heart ή club (εκτός του Ad)
+                const heartClubs = sortedCards.filter(c => 
+                    (c.suitKey === 'hearts' || c.suitKey === 'clubs') && c.id !== 'dA'
+                );
+                if (heartClubs.length > 0) return heartClubs[0]; // Το χαμηλότερο
+
+                // 3. Αν δεν έχει, πετάει spade (εκτός του Ad)
+                const spades = sortedCards.filter(c => c.suitKey === 'spades' && c.id !== 'dA');
+                if (spades.length > 0) return spades[0]; // Το χαμηλότερο
+                
+                // 4. Αν έχει μείνει μόνο ο Άσος Καρό (ή άλλα καρά), πετάει το χαμηλότερο *που δεν είναι ο Άσος*
+                const nonAceDiamonds = sortedCards.filter(c => c.id !== 'dA');
+                if (nonAceDiamonds.length > 0) return nonAceDiamonds[0];
+
+                // 5. Αν *πρέπει* να πετάξει τον Άσο Καρό (είναι το μόνο φύλλο)
+                return sortedCards[0];
+
+            } else { // player === 'EAST'
+                // Παίζει οτιδήποτε εκτός από καρό (το χαμηλότερο)
+                const nonDiamonds = sortedCards.filter(c => c.suitKey !== 'diamonds');
+                if (nonDiamonds.length > 0) {
+                    return nonDiamonds[0];
+                }
+                
+                // Αν έχει μόνο καρά, παίζει το χαμηλότερο
+                return sortedCards[0];
+            }
+        }
+
+        function getWestLead(hand) {
+            const spades = hand.filter(c => c.suitKey === 'spades').sort((a, b) => b.rank - a.rank); // Υψηλότερο
+            const hearts = hand.filter(c => c.suitKey === 'hearts').sort((a, b) => a.rank - b.rank); // Χαμηλότερο
+            const clubs = hand.filter(c => c.suitKey === 'clubs').sort((a, b) => a.rank - b.rank); // Χαμηλότερο
+            const diamonds = hand.filter(c => c.suitKey === 'diamonds').sort((a, b) => a.rank - b.rank); // Χαμηλότερο
+
+            // 1. Συνεχίζει με μπαστούνια (από το μεγαλύτερο)
+            if (spades.length > 0) {
+                return spades[0]; // Υψηλότερο
+            }
+
+            const { played_hA, played_hK, played_cA, played_cK } = gameState.history;
+
+            // 2. Αν έχουν παιχθεί A K hearts, παίζει heart
+            if ((played_hA && played_hK) && hearts.length > 0) {
+                return hearts[0]; // Χαμηλότερο
+            }
+            
+            // 3. Αν έχουν παιχθεί A K clubs, παίζει club
+            if ((played_cA && played_cK) && clubs.length > 0) {
+                return clubs[0]; // Χαμηλότερο
+            }
+            
+            // 4. Διαφορετικά παίζει κούπα ή σπαθί (χαμηλότερο)
+            if (hearts.length > 0) {
+                return hearts[0];
+            }
+            if (clubs.length > 0) {
+                return clubs[0];
+            }
+            
+            // 5. Αν δεν έχει τίποτα άλλο, παίζει καρό
+            return diamonds[0];
+        }
+        
+        function getEastLead(hand) {
+            // Ταξινόμηση όλων των φύλλων από το χαμηλότερο
+            const spades = hand.filter(c => c.suitKey === 'spades').sort((a, b) => a.rank - b.rank);
+            const hearts = hand.filter(c => c.suitKey === 'hearts').sort((a, b) => a.rank - b.rank);
+            const clubs = hand.filter(c => c.suitKey === 'clubs').sort((a, b) => a.rank - b.rank);
+            const diamonds = hand.filter(c => c.suitKey === 'diamonds').sort((a, b) => a.rank - b.rank);
+
+            // 1. Αν έχει spade, παίζει spade (χαμηλότερο)
+            if (spades.length > 0) {
+                return spades[0];
+            }
+
+            // 2. Αν έχει φύλλο στο suit που κέρδισε (lastWinningSuit)
+            if (gameState.lastWinningSuit) {
+                const lastWonSuitCards = hand.filter(c => c.suitKey === gameState.lastWinningSuit).sort((a, b) => a.rank - b.rank);
+                if (lastWonSuitCards.length > 0) {
+                    return lastWonSuitCards[0];
+                }
+            }
+            
+            // 3. Παίζει οτιδήποτε εκτός από καρό (χαμηλότερο)
+            if (hearts.length > 0) {
+                return hearts[0];
+            }
+            if (clubs.length > 0) {
+                return clubs[0];
+            }
+            
+            // 4. Αν έχει μόνο καρά, παίζει καρό
+            return diamonds[0];
+        }
+
+
+        // --- Event Listeners ---
+        newGameButton.addEventListener('click', initGame);
+        handContainers.SOUTH.addEventListener('click', handleCardClick);
+        handContainers.NORTH.addEventListener('click', handleCardClick);
+
+        // --- Init Game ---
+        document.addEventListener('DOMContentLoaded', initGame);
+
+    </script>
+</body>
+</html>
